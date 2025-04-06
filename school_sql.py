@@ -13,24 +13,28 @@ def main():
     pathSplit = path.strip('/').split('/')
 
     if not pathSplit or pathSplit[0] == '':
-        invalidRequest()
+        homePageRoute()
         return
 
     if(pathSplit[0] == "students"): # a request regarding students
 
-        if(method == "GET"): # get students
+        if(method == "GET" and len(pathSplit) < 2): # get students
             try:
                 conn = connectToDB()
                 cursor = conn.cursor()
                 cursor.execute("SELECT * FROM students")
                 rows = cursor.fetchall()
-                students = ""
 
+                students = ""
             except Exception as e:
                 print("Status: 500 Internal Server Error")
                 print("Content-Type: text/plain\n")
                 print(f"Database error: {e}")
 
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM students")
+            rows = cursor.fetchall()
+            students = ""
             for row in rows:
                  # row[0] is id, row[1] is name
                 students += f"ID: {row[0]}, Name: {row[1]}\n"
@@ -41,7 +45,10 @@ def main():
             print(students)                  
 
         elif method == "POST": # post students ??
-            pass
+           invalidRequest()
+
+        else:
+           invalidRequest()
         
     elif pathSplit[0] == "course": # a request regarding courses
         
@@ -57,6 +64,27 @@ def invalidRequest():
     print("Content-Type: text/plain")
     print()
     print(f'no path provided:{path}')
+
+def homePageRoute():
+    print("Status: 200 OK")
+    print("Content-Type: text/plain")
+    print()
+    print("Welcome to the School API!")
+    print("Here are the available endpoints:\n")
+    print("GET /students                 - List all students")
+    print("POST /students                - Add a new student")
+    print("GET /students/<ID>            - Get a specific student by ID")
+    print("PUT /students/<ID>            - Update a student's name")
+    print("DELETE /students/<ID>         - Delete a student")
+    print("POST /students/<ID>/courses   - Add a course to a student")
+    print()
+    print("GET /courses                  - List all courses")
+    print("POST /courses                 - Add a new course")
+    print("GET /courses/<ID>             - Get a specific course by ID")
+    print("DELETE /courses/<ID>          - Delete a course")
+    print()
+    print("GET /debug                    - (Optional) Debug route to see all data")
+    return
 
 def connectToDB():
     conn = pyodbc.connect(
