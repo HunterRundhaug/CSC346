@@ -28,20 +28,37 @@ def main():
                 cursor = conn.cursor()
                 cursor.execute("SELECT * FROM students")
                 rows = cursor.fetchall()
-                conn.close()
 
                 students = []
                 for row in rows:
+                    student_id = int(row[0])
+
+                    # find each class the student is enrolled in
+                    cursor.execute(
+                    """
+                        SELECT c.id
+                        FROM registrations r
+                        JOIN courses c ON r.course_id = c.id
+                        WHERE r.student_id = ?
+                    """, (student_id,))
+
+                    class_rows = cursor.fetchall()
+
+                    classes = [class_row[0] for class_row in class_rows]
+
                     students.append({
                         "id": row[0],
                         "name": row[1],
-                        "link": f"/students/{row[0]}"
+                        "link": f"/students/{row[0]}",
+                        "courses": classes
                     })
+
+                conn.close()
 
                 # CGI headers
                 print("Status: 200 OK")
                 print("Content-Type: application/json\n")
-                print(json.dumps(students))
+                print(json.dumps(students, indent=4))
 
             except Exception as e:
                 print("Status: 500 Internal Server Error")
@@ -70,9 +87,8 @@ def main():
 
                     print("Status: 200 OK")
                     print("Content-Type: application/json\n")
-                    print(json.dumps(result))
+                    print(json.dumps(result, indent=4))
                     return
-            
                 else:
                     print("Status: 404 Not Found")
                     print("Content-Type: text/plain\n")
@@ -175,9 +191,120 @@ def main():
         else:
             invalidRequest()
             
-    elif pathSplit[0] == "course": # a request regarding courses
+    elif pathSplit[0] == "courses": # a request regarding courses
         
-        pass
+        if(method == "GET" and len(pathSplit) < 2): # [ROUTE ] get ALL courses
+            try:
+                conn = connectToDB()
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM courses")
+                rows = cursor.fetchall()
+                conn.close()
+
+                courses = []
+                for row in rows:
+                    courses.append({
+                        "id": row[0],
+                        "link": f"/courses/{row[0]}"
+                    })
+
+                # CGI headers
+                print("Status: 200 OK")
+                print("Content-Type: application/json\n")
+                print(json.dumps(courses, indent=4))
+
+            except Exception as e:
+                print("Status: 500 Internal Server Error")
+                print("Content-Type: text/plain\n")
+                print(f"Database error: {e}")
+
+        elif method == "GET" and len(pathSplit) > 1: # [ROUTE 2] get a Specific course
+            try:
+                course_id = pathSplit[1].strip()
+            except ValueError:
+                invalidRequest()
+                return
+            try:
+                conn = connectToDB()
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM courses WHERE id = ?", (course_id,))
+                row = cursor.fetchone()
+                conn.close()
+
+                if row:
+                    result = {
+                            "id": row[0],
+                            "link": f"/courses/{course_id}",
+                            }
+
+                    print("Status: 200 OK")
+                    print("Content-Type: application/json\n")
+                    print(json.dumps(result, indent=4))
+                    return
+                else:
+                    print("Status: 404 Not Found")
+                    print("Content-Type: text/plain\n")
+                    print(f"No student found with ID {student_id}")
+                    return
+            except Exception as e:
+                print("Status: 500 Internal Server Error")
+                print("Content-Type: text/plain\n")
+                print(f"Database error: {e}")
+                return
+
+        elif method == "POST" and len(pathSplit) == 1: # [ROUTE 3] post a course
+            length = int(os.environ.get('CONTENT_LENGTH', 0))
+            body = sys.stdin.read(length)
+
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                print("Status: 400 Bad Request")
+                print("Content-Type: application/json\n")
+                print(json.dumps({"error": "Invalid JSON"}))
+                return
+
+            course_id = data.get('id')
+
+            if not isinstance(course_id,str) or not course_id.strip(): 
+                print("Status: 400 Bad Request")
+                print("Content-Type: application/json\n")
+                print(json.dumps({"error": "Invalid input data"}))
+                return
+
+            try:
+                conn = connectToDB()
+                cursor = conn.cursor()
+
+                # Check for existing course
+                cursor.execute("SELECT id FROM courses WHERE id = ?", (course_id ))
+                if cursor.fetchone():
+                    print("Status: 409 Conflict")
+                    print("Content-Type: application/json\n")
+                    print(json.dumps({"error": "Course ID already exists"}))
+                    return
+
+                # Insert student
+                cursor.execute("INSERT INTO courses (id) VALUES (?)", (course_id))
+                conn.commit()
+                conn.close()
+
+                # Redirect
+                print("Status: 303 See Other")
+                print(f"Location: /students/{student_id}")
+                print("Content-Type: text/plain\n")
+
+            except Exception as e:
+                print("Status: 500 Internal Server Error")
+                print("Content-Type: application/json\n")
+                print(json.dumps({"error": f"Database error: {str(e)}"}))
+
+        else:
+            invalidRequest()
+
+
+
+        
 
     else:
         invalidRequest();
