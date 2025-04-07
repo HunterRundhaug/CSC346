@@ -22,6 +22,83 @@ def main():
 
     if(pathSplit[0] == "students"): # a request regarding students
 
+        if method == "DELETE" and len(pathSplit) == 2: # delete a student ROUTE
+            try:
+                student_id = int(pathSplit[1])
+            except ValueError:
+                badRequest("Invalid Student ID")
+                return
+
+            try:
+                conn = connectToDB()
+                cursor = conn.cursor()
+
+                # see if student exists
+                cursor.execute("SELECT id FROM students WHERE id = ?", (student_id,))
+                if not cursor.fetchone():
+                    conn.close()
+                    badRequest("input student doesnt exist")
+                    return
+                
+                # delete student from registration
+                cursor.execute("DELETE FROM registrations WHERE student_id = ?", (student_id,))
+
+                # and delete the actual student
+                cursor.execute("DELETE FROM students WHERE id = ?", (student_id,))
+
+                conn.commit()
+                conn.close()
+                print("Status: 303 See Other")
+                print("Location: /students")
+                print("Content-Type: text/plain\n")
+                return
+            except Exception as e:
+                badRequest("Internal Server Error (Manual)")
+                return
+
+
+        if method == "PUT" and len(pathSplit) == 2:
+            try:
+                student_id = int(pathSplit[1])
+            except ValueError:
+                badRequest("Invalid student ID given")
+                return
+
+            length = int(os.environ.get('CONTENT_LENGTH', 0))
+            body = sys.stdin.read(length)
+
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                badRequest("Invalid JSON input")
+                return
+
+            new_name = data.get("name")
+            if not new_name.strip():
+                badRequest("Bad input for new name")
+                return
+
+            # connect to database
+            conn = connectToDB()
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT id FROM students WHERE id = ?", (student_id,))
+            if not cursor.fetchone():
+                conn.close()
+                badRequest("student not found")
+                return
+
+            #otherwise we found the name
+            cursor.execute("UPDATE students SET name = ? WHERE id = ?", (new_name, student_id))
+            conn.commit()
+            conn.close()
+            # Redirect to updated student
+            print("Status: 303 See Other")
+            print(f"Location: /students/{student_id}")
+            print("Content-Type: text/plain\n")
+            return
+
+
         if(method == "GET" and len(pathSplit) < 2): # [ROUTE 1] get ALL students
             try:
                 conn = connectToDB()
@@ -192,6 +269,45 @@ def main():
             invalidRequest()
             
     elif pathSplit[0] == "courses": # a request regarding courses
+
+        if method == "DELETE" and len(pathSplit) == 2:
+            course_id = pathSplit[1]
+
+            if not course_id.strip():
+                badRequest("Invalid course ID")
+                return
+
+            try:
+                conn = connectToDB()
+                cursor = conn.cursor()
+
+                # check if course exists
+                cursor.execute("SELECT id FROM courses WHERE id = ?", (course_id,))
+                if not cursor.fetchone():
+                    conn.close()
+                    badRequest("Course not found")
+                    return
+
+                # check if any students are registered for this course
+                # if so we cant delete it
+                cursor.execute("SELECT * FROM registrations WHERE course_id = ?", (course_id,))
+                if cursor.fetchone():
+                   conn.close()
+                   badRequest("cannot delete  a course that students are registered for")
+                   return
+                
+                # if no students take this course we can delete it.
+                cursor.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+
+                conn.commit()
+                conn.close()
+                print("Status: 303 See Other")
+                print("Location: /courses")
+                print("Content-Type: text/plain\n")
+                return
+                   
+            except Exception as e:
+                badRequest("Manual Internal Server Error")
         
         if(method == "GET" and len(pathSplit) < 2): # [ROUTE ] get ALL courses
             try:
@@ -310,6 +426,11 @@ def main():
         invalidRequest();
 
 
+def badRequest(error):
+    print("Status: 400 Bad Request")
+    print("Content-Type: application/json\n")
+    print(json.dumps({"error": error}))
+    return
 
 def invalidRequest():
     print("Status: 400 Bad Request")
