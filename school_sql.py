@@ -1,4 +1,4 @@
-#!/venv/bin/python
+#!/bin/python3
 
 import json
 import cgi
@@ -6,6 +6,7 @@ import os
 import sys
 import pyodbc
 from db_config import DB_CONFIG
+from server_config import Server_Info
 
 import cgitb
 cgitb.enable()
@@ -37,7 +38,7 @@ def main():
                 cursor.execute("SELECT id FROM students WHERE id = ?", (student_id,))
                 if not cursor.fetchone():
                     conn.close()
-                    badRequest("input student doesnt exist")
+                    notFound(path)
                     return
                 
                 # delete student from registration
@@ -126,7 +127,7 @@ def main():
                     students.append({
                         "id": row[0],
                         "name": row[1],
-                        "link": f"/students/{row[0]}",
+                        "link": f"{Server_Info["url"]}/students/{row[0]}",
                         "courses": classes
                     })
 
@@ -167,9 +168,7 @@ def main():
                     print(json.dumps(result, indent=4))
                     return
                 else:
-                    print("Status: 404 Not Found")
-                    print("Content-Type: text/plain\n")
-                    print(f"No student found with ID {student_id}")
+                    notFound(path)
                     return
             except Exception as e:
                 print("Status: 500 Internal Server Error")
@@ -285,7 +284,7 @@ def main():
                 cursor.execute("SELECT id FROM courses WHERE id = ?", (course_id,))
                 if not cursor.fetchone():
                     conn.close()
-                    badRequest("Course not found")
+                    notFound(path)
                     return
 
                 # check if any students are registered for this course
@@ -321,7 +320,7 @@ def main():
                 for row in rows:
                     courses.append({
                         "id": row[0],
-                        "link": f"/courses/{row[0]}"
+                        "link": f"{Server_Info["url"]}/courses/{row[0]}"
                     })
 
                 # CGI headers
@@ -350,7 +349,7 @@ def main():
                 if row:
                     result = {
                             "id": row[0],
-                            "link": f"/courses/{course_id}",
+                            "link": f"{Server_Info["url"]}/courses/{course_id}",
                             }
 
                     print("Status: 200 OK")
@@ -358,9 +357,7 @@ def main():
                     print(json.dumps(result, indent=4))
                     return
                 else:
-                    print("Status: 404 Not Found")
-                    print("Content-Type: text/plain\n")
-                    print(f"No student found with ID {student_id}")
+                    notFound(path)
                     return
             except Exception as e:
                 print("Status: 500 Internal Server Error")
@@ -425,6 +422,11 @@ def main():
     else:
         invalidRequest();
 
+def notFound(path_input):
+    print("Status: 404 Not Found")
+    print("Content-Type: text/html\n")
+    print(f'<html><body> <p><font size=+3><b>404 Not Found</b></font> <p>PATH_INFO: {path_input} </body></html>')
+    return
 
 def badRequest(error):
     print("Status: 400 Bad Request")
