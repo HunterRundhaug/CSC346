@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+import cgi
+import os
+import sqlite3
+import json
+
+def main():
+    
+    # Get request method, defaults to GET if none was defined
+    requestMethod = os.environ.get("REQUEST_METHOD", "GET")
+
+    form = cgi.FieldStorage()
+    path_info = os.environ.get("PATH_INFO", "").strip().split('/')
+    user_cgi = form.getvalue("user", "")
+    desc_cgi = form.getvalue("description", "")
+
+    if len(path_info) == 1:
+        cursor = connectToDB()
+        cursor.execute("SELECT * FROM servers")
+        data = cursor.fetchall()
+        jsonResponse(data)
+        cursor.close()
+        return
+
+    elif len(path_info) > 0:
+        instanceId = path_info[1]
+        cursor = connectToDB()
+        cursor.execute("SELECT * FROM servers WHERE instance_id = ?", (instanceId,))
+        data = cursor.fetchall()
+        jsonResponse(data)
+        cursor.close()
+        return
+
+
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    cursor = conn.cursor()
+    return cursor
+
+def jsonResponse(jData):
+    servers = {}
+    for server in jData:
+        servD = {}
+        servD["owner"] = server[1]
+        servD["description"] = server[2]
+        servD["instance_id"] = server[3]
+        servD["ready"] = server[4]
+        servers[server[0]] = servD
+    
+    print("Status: 200 OK")
+    print("Content-Type: application/json")
+    print()
+    print(f"{json.dumps(servers)}")
+
+
+def plainOkResponse():
+    print("Status: 200 OK")
+    print("Content-Type: text/plain")
+    print()
+    print(f"Hello world")
+
+
+main()
