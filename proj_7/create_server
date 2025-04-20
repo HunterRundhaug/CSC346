@@ -62,14 +62,15 @@ def main():
         conn.commit()
         cursor.close()
         conn.close()
+        okResponse(response.data, instance_id)
+
+        os.system(f"/usr/lib/cgi-bin/CSC346/proj_7/monitor_vm {instance_id} 1>/dev/null 2>/dev/null &")
 
 
     except Exception as e:
         badResponse(e)
         return
 
-
-    okResponse(response)
     return
 
 def badResponse(error):
@@ -78,11 +79,12 @@ def badResponse(error):
     print()
     print(f"{error}")
 
-def okResponse(info):
+def okResponse(info, in_id):
     print("Status: 200 Ok")
     print("Content-Type: text/plain")
     print()
-    print("Pretty Good connection")
+    print("Successfully intiated a new instance:")
+    print(f"See: http://144.24.43.159/cgi-bin/CSC346/proj_7/api/servers/{in_id}\n")
     print(f"{info}")
 
 

@@ -1,0 +1,40 @@
+#!/home/ubuntu/oci-env/bin/python3
+
+import os
+import time
+import oci
+import sys
+import sqlite3
+
+
+def main():
+
+    instance_id = sys.argv[1]
+    config = oci.config.from_file("/home/ubuntu/.oci/config/oci_config")
+    compute = oci.core.ComputeClient(config)
+    x = 0
+    
+    while x < 200: # run for 10 mins max
+        vm_state = compute.get_instance(instance_id).data.lifecycle_state
+        x+=1
+        time.sleep(3)
+        if vm_state == "RUNNING":
+            set_vm_readystate(instance_id)
+            return
+
+def set_vm_readystate(instance_id):
+    conn = connectToDB()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE servers SET ready = 1 WHERE instance_id = ?", (instance_id,))
+    conn.commit()
+    conn.close()
+    return
+
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    return conn
+
+main()
+
+
+
