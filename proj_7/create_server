@@ -5,26 +5,91 @@ import os
 import sqlite3
 import json
 import oci
+import base64
 
-from oci.config import from_file
-from oci.config import validate_config
+
+startup_script = """#!/bin/bash
+sudo iptables -I INPUT -m state --state NEW -p tcp --dport 80 -j ACCEPT
+sudo netfilter-persistent save
+apt update
+apt install apache2 -y
+systemctl start apache2
+"""
 
 def main():
+    # probably should hide the ocid info
+    response = None
+    try:
+        config = oci.config.from_file(file_location="/home/ubuntu/.oci/config/oci_config")
+        compute_client = oci.core.ComputeClient(config)
+        vnic_details = oci.core.models.CreateVnicDetails(
+            subnet_id="ocid1.subnet.oc1.phx.aaaaaaaapz3eqq4p7hj4i7aerzzhoa2o2j65upkjjh4hexzkzcepryow7i4q",
+            assign_public_ip=True
+        )
 
-    config = oci.config.from_file(file_location="/home/ubuntu/.oci/config/oci_config")
-    validate_config(config)
+        launch_details = oci.core.models.LaunchInstanceDetails(
+            compartment_id=config["tenancy"],  # Use tenancy or specific compartment OCID
+            availability_domain="zqiv:PHX-AD-2",  # Use list_availability_domains to get yours
+            shape="VM.Standard.E2.1.Micro",  # Always Free eligible shape
+            display_name="default-launched-vm",
+            create_vnic_details=vnic_details,
+            subnet_id="ocid1.subnet.oc1.phx.aaaaaaaapz3eqq4p7hj4i7aerzzhoa2o2j65upkjjh4hexzkzcepryow7i4q",  
+            # Use existing subnet (same one main VM uses)
+            metadata={
+                "ssh_authorized_keys": open("/home/ubuntu/.ssh/id_rsa.pub").read(),
+                "user_data": base64.b64encode(startup_script.encode("utf-8")).decode("utf-8")
+            },
+            source_details=oci.core.models.InstanceSourceViaImageDetails(
+                source_type="image",
+                image_id="ocid1.image.oc1.phx.aaaaaaaa4cynfsim4vwfgjccqf723hurw3ouovcqeuxwatdieqlh7bjevata"  
+            )
+        )
 
-    form = cgi.FieldStorage()
-    new_vm_owner = form.getvalue("owner", "")
-    new_vm_description = form.getvalue("description", "")
-    okResponse()
+        response = compute_client.launch_instance(launch_details)
+    
+        form = cgi.FieldStorage()
+        new_vm_owner = form.getvalue("owner", "")
+        new_vm_description = form.getvalue("description", "")
+        instance_id = response.data.id
+
+        conn = connectToDB()
+        cursor = conn.cursor()
+        query = """
+        INSERT INTO servers (owner, description, instance_id, ready)
+        VALUES (?, ?, ?, ?)
+        """
+        cursor.execute(query, (new_vm_owner, new_vm_description, instance_id, 0))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+
+    except Exception as e:
+        badResponse(e)
+        return
+
+
+    okResponse(response)
     return
 
-def okResponse():
+def badResponse(error):
+    print("Status: 500 Error")
+    print("Content-Type: text/plain")
+    print()
+    print(f"{error}")
+
+def okResponse(info):
     print("Status: 200 Ok")
     print("Content-Type: text/plain")
     print()
     print("Pretty Good connection")
+    print(f"{info}")
+
+
+
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    return conn
 
 main()
 
