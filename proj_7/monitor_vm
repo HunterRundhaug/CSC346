@@ -19,13 +19,16 @@ def main():
         x+=1
         time.sleep(3)
         if vm_state == "RUNNING":
-            set_vm_readystate(instance_id)
+            public_ip = getInstanceIp(instance_id, compute, config)
+            set_vm_readystate(instance_id, public_ip)
             return
 
-def set_vm_readystate(instance_id):
+def set_vm_readystate(instance_id, public_ip):
     conn = connectToDB()
     cursor = conn.cursor()
     cursor.execute("UPDATE servers SET ready = 1 WHERE instance_id = ?", (instance_id,))
+    if(public_ip != None):
+        cursor.execute("UPDATE servers SET ip = ? WHERE instance_id = ?", (public_ip, instance_id))
     conn.commit()
     conn.close()
     return
@@ -33,6 +36,19 @@ def set_vm_readystate(instance_id):
 def connectToDB():
     conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
     return conn
+
+def getInstanceIp(instance_id, compute_client, config):
+    vnic_attachments = compute_client.list_vnic_attachments(
+                compartment_id=config["tenancy"],
+                instance_id=instance_id
+        ).data
+    if(len(vnic_attachments) < 1):
+        return None
+    vnic_id = vnic_attachments[0].vnic_id
+    network_client = oci.core.VirtualNetworkClient(config)
+    vnic = network_client.get_vnic(vnic_id).data
+    public_ip = vnic.public_ip
+    return public_ip
 
 main()
 

@@ -46,6 +46,7 @@ def jsonResponse(jData):
         servD["owner"] = server[1]
         servD["description"] = server[2]
         servD["instance_id"] = server[3]
+        servD["ip"] = server[5]
         servD["ready"] = server[4]
         servers[server[0]] = servD
     

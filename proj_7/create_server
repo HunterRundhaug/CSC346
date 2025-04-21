@@ -73,6 +73,18 @@ def main():
 
     return
 
+def getInstanceIp(instance_id, compute_client, config):
+    vnic_attachments = compute_client.list_vnic_attachments(
+                compartment_id=config["tenancy"],
+                instance_id=instance_id
+        ).data
+    vnic_id = vnic_attachments[0].vnic_id
+    network_client = oci.core.VirtualNetworkClient(config)
+    vnic = network_client.get_vnic(vnic_id).data
+    public_ip = vnic.public_ip
+    return public_ip
+
+
 def badResponse(error):
     print("Status: 500 Error")
     print("Content-Type: text/plain")
