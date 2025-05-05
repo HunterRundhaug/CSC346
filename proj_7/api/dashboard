@@ -1,0 +1,69 @@
+#!/home/ubuntu/oci-env/bin/python3
+
+import cgi
+import os
+import http.cookies
+import time
+import sqlite3
+
+from html_templates import dashboard_html
+
+
+cookie_string = os.environ.get("HTTP_COOKIE", "")
+cookie = http.cookies.SimpleCookie()
+cookie.load(cookie_string)
+
+def main():
+    # if we get here then add the session to the db
+    try:
+        if "session_id" not in cookie or cookie["session_id"].value == "":
+            badRequest("No session_id cookie or it's empty")
+            return
+
+        conn = connectToDB()
+        cursor = conn.cursor()
+        session_id = cookie["session_id"].value
+        created_at = time.time()
+        user = getUser(session_id)
+        if user != None:
+            print("Content-Type: text/html")
+            print()
+            print(dashboard_html(user))
+            return
+        
+        badRequest("something bad happened...")
+        return
+
+    except sqlite3.Error as e:
+        badRequest(f"data base error: {e}")
+        return
+
+def getUser(session_id):
+    try:
+        conn = connectToDB()
+        cursor = conn.cursor()
+        session_id = cookie["session_id"].value
+        cursor.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[1] 
+        else:
+            return None
+
+    except sqlite3.Error as e:
+        badRequest(f"data base error: {e}")
+        return
+
+def badRequest(why):
+    print("Status: 400 Bad Request")
+    print("Content-Type: text/html")
+    print()
+    print(f"Bad request because: {why}")
+    
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    return conn
+
+
+main()

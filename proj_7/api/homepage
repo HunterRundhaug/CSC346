@@ -1,0 +1,90 @@
+#!/home/ubuntu/oci-env/bin/python3
+
+import cgi
+import os
+import http.cookies
+import uuid
+import time
+import sqlite3
+
+from html_templates import dashboard_html
+
+"""
+    table schema...
+ CREATE TABLE sessions (
+   ...>     session_id TEXT PRIMARY KEY,
+   ...>     username TEXT NOT NULL,
+   ...>     created_at INTEGER NOT NULL
+   ...> );
+"""
+
+def main():
+    cookie_string = os.environ.get("HTTP_COOKIE", "");
+    cookie = http.cookies.SimpleCookie()
+    cookie.load(cookie_string)
+
+    if "session_id" in cookie and len(cookie["session_id"].value) > 0 :
+        username = checkIfLoggedIn(cookie)
+        if username != None:
+            loggedInResponse(cookie)
+        else:
+            notLoggedInResponse()
+
+    else:
+        cookie["session_id"] = str(uuid.uuid4()) # generate a unique id
+        cookie["session_id"]["max-age"] = 86400 # one day in seconds
+        cookie["session_id"]["path"] = "/"
+        notLoggedInResponse(cookie)
+
+def checkIfLoggedIn(cookie):
+    try:
+        session_id = cookie["session_id"].value
+        conn = connectToDB()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, created_at FROM sessions WHERE session_id = ?", (session_id,))
+        row = cursor.fetchone()
+        if row:
+            if row[0] != "" and int(time.time()) - row[1] <= 86400:
+                return row[0]
+            else:
+                return None
+
+        else:
+            return None
+
+    except sqlite3.Error as e:
+        return None
+
+
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    return conn
+
+def notLoggedInResponse(cookie=None):
+    print("Status: 200 OK")
+    print("Content-Type: text/html")
+    if cookie:
+        print(cookie.output())
+    print()
+    print("""
+    <html>
+    <head>
+        <title>Login Required</title>
+    </head>
+    <body>
+        <h2>You are not logged in</h2>
+        <form method="post" action="/cgi-bin/CSC346/proj_7/api/login">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+            <input type="submit" value="Log In">
+        </form>
+    </body>
+    </html>
+    """)
+
+def loggedInResponse(cookie):
+    print("Status: 303 See Other")
+    print("Location: /cgi-bin/CSC346/proj_7/api/dashboard")
+    print()  # End of headers
+
+main()

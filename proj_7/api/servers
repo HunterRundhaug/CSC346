@@ -5,6 +5,7 @@ import os
 import sqlite3
 import json
 import oci
+import http.cookies
 
 def main():
     
@@ -25,14 +26,31 @@ def main():
         return
 
     elif len(path_info) > 0:
-        instanceId = path_info[1]
+        cookie = getHttpCookie()
+        if cookie == None:
+            return # should responde with error
+        user = getUserFromSession(cookie)
         cursor = connectToDB()
-        cursor.execute("SELECT * FROM servers WHERE instance_id = ?", (instanceId,))
+        cursor.execute("SELECT * FROM servers WHERE owner = ?", (user.strip(),))
         data = cursor.fetchall()
-        jsonResponse(data)
+        htmlResponseForJson(data)
         cursor.close()
         return
 
+def getUserFromSession(cookie):
+    if "session_id" not in cookie:
+        return None
+    session_id = cookie["session_id"].value
+    cursor = connectToDB()
+    cursor.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
+    data = cursor.fetchone()
+    return data[1]
+
+def getHttpCookie():
+    cookie_string = os.environ.get("HTTP_COOKIE", "");
+    cookie = http.cookies.SimpleCookie()
+    cookie.load(cookie_string)
+    return cookie
 
 def connectToDB():
     conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
@@ -62,5 +80,53 @@ def plainOkResponse():
     print()
     print(f"Hello world")
 
+def htmlResponseForJson(json):
+    divString = ""
+    for vmData in json:
+        id = vmData[0]
+        owner = vmData[1]
+        desc = vmData[2]
+        instance = vmData[3]
+        ready = vmData[4]
+        ip = vmData[5]
+        divString += f'''
+                <ul><li>{id}</li> <li>{owner}</li>
+                    <li>{desc}</li> <li>{instance}</li>
+                    <li>{ready}</li> <li>{ip}</li>
+            '''
+
+    style = """
+        <style> 
+            body{
+                font-family: Arial, sans-serif;
+            }
+            li{
+                display:inline;
+                border: 1px solid rgb(100,100,100);
+                padding: 10px;
+                margin:0px;
+            }
+        </style>
+    """
+    html = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>My Virtual Machines</title>
+    </head>
+    <body>
+        <h1>Virtual Machine Library</h1>
+        <div style="border:1px solid black"> 
+            <h3>- - - - id | owner | description | instance ID | ready | ip </h3>
+            {divString}
+    </div>
+        {style}
+    </body>
+    </html>
+    """
+    print("Status: 200 OK")
+    print("Content-Type: text/html")
+    print()
+    print(html)
 
 main()

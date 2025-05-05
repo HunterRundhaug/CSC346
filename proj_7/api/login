@@ -1,0 +1,153 @@
+#!/home/ubuntu/oci-env/bin/python3
+
+import cgi
+import os
+import http.cookies
+import time
+import sqlite3
+import uuid
+
+from html_templates import dashboard_html, loginPage
+
+def main():
+    cookie_string = os.environ.get("HTTP_COOKIE", "")
+    cookie = http.cookies.SimpleCookie()
+    cookie.load(cookie_string)
+
+    requestMethod = os.environ.get("REQUEST_METHOD", "")
+
+    if requestMethod == "GET":
+        print("Status: 200 Ok")
+        print("Content-Type: text/html")
+        print()
+        print(loginPage())
+        return
+
+    if requestMethod != "POST":
+        badRequest("no GET request")
+        return
+
+    # post login details
+    form = cgi.FieldStorage()
+    user_cgi = form.getvalue("username", "")
+    if not user_cgi or user_cgi == "":
+        badRequest("no username or username is empty")
+        return
+    if "session_id" not in cookie or cookie["session_id"].value == "":
+        badRequest("no sessiond id or session id is empty")
+        return
+    session_id = cookie["session_id"].value
+
+    # check if username already exists so we dont add a dup
+    existing_session_id = checkIfUserAlreadyExists(user_cgi)
+    if existing_session_id != None:
+        session_id = existing_session_id
+        cookie = getNewCookie(session_id)
+        redirectWithNewId(cookie)
+        return
+    
+    if checkIfSessionIdAlreadyExists(session_id) == True:
+        new_id = str(uuid.uuid4())
+        cookie = getNewCookie(new_id)
+        createNewItem(new_id, user_cgi)
+        redirectWithNewId(cookie)
+        return
+
+
+    # if we get here then add the session to the db
+    try:
+        conn = connectToDB()
+        cursor = conn.cursor()
+        created_at = time.time()
+        cursor.execute("""
+            INSERT INTO sessions (session_id, username, created_at)
+            VALUES (?, ?, ?)
+        """, (session_id, user_cgi, int(created_at)))
+        conn.commit()       # <-- this is the key
+        conn.close()
+        redirect()
+        return
+
+    except sqlite3.Error as e:
+        badRequest(f"data base error: {e}")
+        return
+
+def createNewItem(session_id, user_cgi):
+    try:
+        conn = connectToDB()
+        cursor = conn.cursor()
+        created_at = time.time()
+        cursor.execute("""
+            INSERT INTO sessions (session_id, username, created_at)
+            VALUES (?, ?, ?)
+        """, (session_id, user_cgi, int(created_at)))
+        conn.commit()       # <-- this is the key
+        conn.close()
+
+    except sqlite3.Error as e:
+        badRequest(f"data base error: {e}")
+        return
+
+def getNewCookie(session_id):
+    cookie = http.cookies.SimpleCookie()
+    cookie["session_id"] = session_id
+    cookie["session_id"]["path"] = "/"
+    cookie["session_id"]["max-age"] = 86400
+    return cookie
+
+def redirectWithNewId(cookie):
+    print("Status: 303 See Other")
+    print(cookie.output())
+    print("Location: /cgi-bin/CSC346/proj_7/api/dashboard")
+    print()  # End of headers
+
+def redirect():
+    print("Status: 303 See Other")
+    print("Location: /cgi-bin/CSC346/proj_7/api/dashboard")
+    print()  # End of headers
+
+def checkIfSessionIdAlreadyExists(session_id):
+    try:
+        conn = connectToDB()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
+        row = cursor.fetchone()
+        if row:
+            return True
+        else:
+            return False
+        conn.close()
+
+    except sqlite3.Error as e:
+        badRequest(f"data base error: {e}")
+        return
+
+def checkIfUserAlreadyExists(username):
+    try:
+        conn = connectToDB()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sessions WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        else:
+            return None
+        conn.close()
+
+    except sqlite3.Error as e:
+        badRequest(f"data base error: {e}")
+        return
+
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    return conn
+
+def badRequest(why):
+    print("Status: 400 Bad Request")
+    print("Content-Type: text/html")
+    print()
+    print(f"Bad request because: {why}")
+
+main()
+
+

@@ -1,0 +1,94 @@
+#!/home/ubuntu/oci-env/bin/python3
+
+import cgi
+import os
+import http.cookies
+import uuid
+import time
+import sqlite3
+
+from html_templates import dashboard_html
+
+"""
+    table schema...
+ CREATE TABLE sessions (
+   ...>     session_id TEXT PRIMARY KEY,
+   ...>     username TEXT NOT NULL,
+   ...>     created_at INTEGER NOT NULL
+   ...> );
+"""
+
+problem = ""
+def main():
+    cookie_string = os.environ.get("HTTP_COOKIE", "");
+    cookie = http.cookies.SimpleCookie()
+    cookie.load(cookie_string)
+    if "session_id" in cookie:
+        if checkIfLoggedIn(cookie) == True:
+            loggedInResponse()
+        else:
+            notLoggedInResponse()
+
+    else:
+        cookie["session_id"] = str(uuid.uuid4()) # generate a unique id
+        cookie["session_id"]["max-age"] = 86400 # one day in seconds
+        cookie["session_id"]["path"] = "/"
+        print("Status: 200 OK")
+        print("Content-Type: text/plain")
+        print(cookie.output())
+        print()
+        print(f"No cookie set")
+        print(cookie)
+
+def checkIfLoggedIn(cookie):
+    try:
+        session_id = cookie["session_id"]
+        cursor = connectToDB()
+        cursor.execute("SELECT username, created_at FROM sessions WHERE session_id = ?", (session_id,))
+        row = cursor.fetchone()
+        if row:
+            if row[0] != "" and int(time.time()) - row[1] > 86400:
+                return True
+            else:
+                problem = "username doesnt exist or session expired"
+                return False
+
+        else:
+            problem = "username is null"
+            return False
+
+    except sqlite3.Error as e:
+        problem = "sql falied"
+        return False
+
+
+def connectToDB():
+    conn = sqlite3.connect("/usr/lib/cgi-bin/CSC346/proj_7/test.db")
+    cursor = conn.cursor()
+    return cursor
+
+def notLoggedInResponse():
+    print("Status: 200 OK")
+    print("Content-Type: text/html")
+    print()
+    problem = "hello"
+    print(f"""
+    <html>
+    <head>
+        <title>Login Required {problem}</title>
+    </head>
+    <body>
+        <h2>You are not logged in</h2>
+        <form method="post" action="/cgi-bin/CSC346/proj_7/api/login">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+            <input type="submit" value="Log In">
+        </form>
+    </body>
+    </html>
+    """)
+
+def loggedInResponse():
+    print(dashboard_html());
+
+main()
